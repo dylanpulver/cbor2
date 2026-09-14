@@ -740,6 +740,52 @@ def test_encode_stringrefs_repeated_bytearray() -> None:
     assert loads(encoded) == [b"abcd", b"abcd", b"abcd"]
 
 
+# The worked nested example published in the stringref spec
+# (http://cbor.schmorp.de/stringref), with its documented decoding.
+#
+#   d90100 85   256([
+#   63616161      "aaa",
+#   d81900        25(0),          -> "aaa"
+#   d90100 83     256([
+#   63626262        "bbb",
+#   63616161        "aaa",
+#   d81901          25(1)         -> "aaa"
+#                 ]),
+#   d90100 82     256([
+#   63636363        "ccc",
+#   d81900          25(0)         -> "ccc"
+#                 ]),
+#   d81900        25(0)           -> "aaa"
+#               ])
+SPEC_NESTED_EXAMPLE = unhexlify(
+    "d901008563616161d81900d90100836362626263616161d81901d901008263636363d81900d81900"
+)
+SPEC_NESTED_DECODED = ["aaa", "aaa", ["bbb", "aaa", "aaa"], ["ccc", "ccc"], "aaa"]
+
+
+def test_encode_stringrefs_nested_namespace_matches_spec_example() -> None:
+    # Inside the first inner namespace "aaa" is index 1, not index 0 as it is outside.
+    value = [
+        "aaa",
+        "aaa",
+        CBORTag(256, ["bbb", "aaa", "aaa"]),
+        CBORTag(256, ["ccc", "ccc"]),
+        "aaa",
+    ]
+    assert dumps(value, string_referencing=True) == SPEC_NESTED_EXAMPLE
+
+
+def test_decode_stringrefs_nested_namespace_matches_spec_example() -> None:
+    assert loads(SPEC_NESTED_EXAMPLE) == SPEC_NESTED_DECODED
+
+
+def test_encode_stringrefs_nested_namespace_restores_outer() -> None:
+    # The nested namespace must not consume an outer index, so "aaaa" is still outer index 0.
+    value = [CBORTag(256, ["aaaa"]), "aaaa", "aaaa"]
+    encoded = dumps(value, string_referencing=True)
+    assert loads(encoded) == [["aaaa"], "aaaa", "aaaa"]
+
+
 @pytest.mark.parametrize(
     "tag",
     [
